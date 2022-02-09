@@ -4,6 +4,7 @@ import 'dart:io';
 import 'args/args.dart';
 import 'args/argument.dart';
 
+String defultPathSeparator = '/';
 String projectDir = Directory('').absolute.path;
 String pgyerUrl = 'https://www.pgyer.com/apiv2/app/upload';
 String wxUrl =
@@ -58,9 +59,12 @@ Future<bool> build(String platform) async {
   }
   var apkPath;
   if (platform == ANDROID_PLATFORM) {
-    apkPath = '$projectDir${r'build\app\outputs\flutter-apk\app-release.apk'}';
+    apkPath = '$projectDir${r'build/app/outputs/flutter-apk/app-release.apk'}';
   } else {
-    apkPath = '$projectDir${r'build\ios\ipa\复骨医疗.ipa'}';
+    apkPath = '$projectDir${r'build/ios/ipa/复骨医疗.ipa'}';
+  }
+  if (Platform.pathSeparator != defultPathSeparator) {
+    apkPath.replaceAll(defultPathSeparator, Platform.pathSeparator);
   }
   var uploadStatus = await uploadPgyer(apkPath);
   if (uploadStatus.status != 0) {
