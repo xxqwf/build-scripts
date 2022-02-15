@@ -18,45 +18,54 @@ typedef Callback<T> = void Function(T value);
 Future<bool> calculate(List<String> args) async {
   if (args.isEmpty) return false;
   if (argResults['build'] != null) {
-    if (Args().build.value.contains('All')) {
-      await build(ANDROID_PLATFORM);
-      await build(IOS_PLATFORM);
+    bool dependenciseStatus = await reEstablishDependencies();
+    if (!dependenciseStatus) {
+      return true;
     } else {
-      if (Args().build.value.contains(ANDROID_PLATFORM)) {
+      if (Args().build.value.contains('All')) {
         await build(ANDROID_PLATFORM);
-      }
-      if (Args().build.value.contains(IOS_PLATFORM)) {
         await build(IOS_PLATFORM);
+      } else {
+        if (Args().build.value.contains(ANDROID_PLATFORM)) {
+          await build(ANDROID_PLATFORM);
+        }
+        if (Args().build.value.contains(IOS_PLATFORM)) {
+          await build(IOS_PLATFORM);
+        }
       }
     }
   }
   return true;
 }
 
-Future<bool> build(String platform) async {
-  logcat('$platform开始打包');
+Future<bool> reEstablishDependencies() async {
+  logcat('开始打包');
   var clean = await start('flutter', ['clean']);
   if (clean != 0) {
-    logcat('$platform flutter clean 失败');
+    logcat(' flutter clean 失败');
     return false;
   }
   var pubGet = await start('flutter', ['pub', 'get']);
   if (pubGet != 0) {
-    logcat('$platform flutter pub get 失败');
+    logcat(' flutter pub get 失败');
     return false;
   }
+  return true;
+}
+
+Future<bool> build(String platform) async {
   var status =
       platform == ANDROID_PLATFORM ? await buildAndroid() : await buildIOS();
   if (status != 0) {
     logcat('$platform打包失败');
     return false;
   }
-  logcat('$platform打包完成');
-  var pubSentry = await start('flutter', ['pub', 'run', 'sentry_dart_plugin']);
-  if (pubSentry != 0) {
-    logcat('$platform flutter pub run sentry_dart_plugin 失败');
-    return false;
-  }
+  // logcat('$platform打包完成');
+  // var pubSentry = await start('flutter', ['pub', 'run', 'sentry_dart_plugin']);
+  // if (pubSentry != 0) {
+  //   logcat('$platform flutter pub run sentry_dart_plugin 失败');
+  //   return false;
+  // }
   var apkPath;
   if (platform == ANDROID_PLATFORM) {
     apkPath = '$projectDir${r'build/app/outputs/flutter-apk/app-release.apk'}';
@@ -83,26 +92,35 @@ Future<int> buildAndroid() async {
 }
 
 Future<int> buildIOS() async {
-  var cdIos = await start('cd', ['ios']);
-  if (cdIos != 0) {
-    logcat('$IOS_PLATFORM cd ios 失败');
-    return cdIos;
+  // var cdIos = await start('cd ios && pod install', []);
+  // if (cdIos != 0) {
+  //   logcat('$IOS_PLATFORM pod install 失败');
+  //   return cdIos;
+  // }
+
+  var iosPath = '$projectDir${r'ios'}';
+  if (Platform.pathSeparator != defultPathSeparator) {
+    iosPath.replaceAll(defultPathSeparator, Platform.pathSeparator);
   }
-  var podInstall = await start('pod', ['install']);
+
+  var podInstall = await start('pod', ['install'], workingDirectory: iosPath);
   if (podInstall != 0) {
     logcat('$IOS_PLATFORM pod install 失败');
     return podInstall;
   }
-  var cdRoot = await start('cd', ['../']);
-  if (cdRoot != 0) {
-    logcat('$IOS_PLATFORM cd root directory 失败');
-    return cdRoot;
-  }
+  // var cdRoot = await start('cd', ['../']);
+  // if (cdRoot != 0) {
+  //   logcat('$IOS_PLATFORM cd root directory 失败');
+  //   return cdRoot;
+  // }
+
+  String exportOptionsPlistPath = '$projectDir${r'ExportOptions/dev.plist'}';
+
   var status = await start('flutter', [
     'build',
     'ipa',
     '--release',
-    r'--export-options-plist=$PWD/ExportOptions/dev.plist'
+    '--export-options-plist=$exportOptionsPlistPath',
   ]);
   return status;
 }
