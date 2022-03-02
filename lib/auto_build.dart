@@ -23,19 +23,34 @@ Future<bool> calculate(List<String> args) async {
       return true;
     } else {
       if (Args().build.value.contains('All')) {
-        await build(ANDROID_PLATFORM);
-        await build(IOS_PLATFORM);
+        bool androidComplate = false;
+        bool iosComplate = false;
+        build(ANDROID_PLATFORM).then((value) {
+          androidComplate = true;
+          if (iosComplate && androidComplate) {
+            return true;
+          }
+        });
+        build(IOS_PLATFORM).then((value) {
+          iosComplate = true;
+          if (iosComplate && androidComplate) {
+            return true;
+          }
+        });
       } else {
         if (Args().build.value.contains(ANDROID_PLATFORM)) {
-          await build(ANDROID_PLATFORM);
+          await build(ANDROID_PLATFORM).then((value) {
+            return true;
+          });
         }
         if (Args().build.value.contains(IOS_PLATFORM)) {
-          await build(IOS_PLATFORM);
+          await build(IOS_PLATFORM).then((value) {
+            return true;
+          });
         }
       }
     }
   }
-  return true;
 }
 
 Future<bool> reEstablishDependencies() async {
