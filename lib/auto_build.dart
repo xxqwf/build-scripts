@@ -20,6 +20,7 @@ Future<bool> calculate(List<String> args) async {
   if (argResults['build'] != null) {
     bool dependenciseStatus = await reEstablishDependencies();
     if (!dependenciseStatus) {
+      logcat('项目依赖失败');
       return true;
     } else {
       if (Args().build.value.contains('All')) {
@@ -54,7 +55,7 @@ Future<bool> calculate(List<String> args) async {
 }
 
 Future<bool> reEstablishDependencies() async {
-  logcat('开始打包');
+  logcat('开始清理项目');
   var clean = await start('flutter', ['clean']);
   if (clean != 0) {
     logcat(' flutter clean 失败');
@@ -65,10 +66,12 @@ Future<bool> reEstablishDependencies() async {
     logcat(' flutter pub get 失败');
     return false;
   }
+  logcat('清理项目完成');
   return true;
 }
 
 Future<bool> build(String platform) async {
+  logcat('开始打包');
   var status =
       platform == ANDROID_PLATFORM ? await buildAndroid() : await buildIOS();
   if (status != 0) {
@@ -102,6 +105,7 @@ Future<bool> build(String platform) async {
 }
 
 Future<int> buildAndroid() async {
+  logcat('开始打包Android');
   var status = await start('flutter', ['build', 'apk', '--release']);
   return status;
 }
@@ -112,7 +116,7 @@ Future<int> buildIOS() async {
   //   logcat('$IOS_PLATFORM pod install 失败');
   //   return cdIos;
   // }
-
+  logcat('开始打包iOS');
   var iosPath = '$projectDir${r'ios'}';
   if (Platform.pathSeparator != defultPathSeparator) {
     iosPath.replaceAll(defultPathSeparator, Platform.pathSeparator);
