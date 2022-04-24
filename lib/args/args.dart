@@ -7,7 +7,7 @@ class Args {
   Args._()
       : help = HelpCommand(),
         build = BuildCommand();
-  static Args _args;
+  static Args? _args;
   final HelpCommand help;
   final BuildCommand build;
 }

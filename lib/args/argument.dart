@@ -3,7 +3,7 @@ import 'package:args/args.dart';
 import 'args.dart';
 
 ArgParser parser = ArgParser();
-ArgResults argResults;
+ArgResults? argResults;
 
 void parseArgs(List<String> args) {
   Args();
@@ -49,8 +49,8 @@ abstract class Argument<T> {
 
   /// The value this option
   T get value {
-    if (argResults.wasParsed(name)) {
-      return argResults[name] as T;
+    if (argResults?.wasParsed(name) ?? false) {
+      return argResults?[name] as T;
     }
     return defaultsTo;
   }

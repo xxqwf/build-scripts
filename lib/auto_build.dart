@@ -17,7 +17,7 @@ typedef Callback<T> = void Function(T value);
 
 Future<bool> calculate(List<String> args) async {
   if (args.isEmpty) return false;
-  if (argResults['build'] != null) {
+  if (argResults?['build'] != null) {
     bool dependenciseStatus = await reEstablishDependencies();
     if (!dependenciseStatus) {
       return true;
@@ -51,6 +51,7 @@ Future<bool> calculate(List<String> args) async {
       }
     }
   }
+  return false;
 }
 
 Future<bool> reEstablishDependencies() async {
@@ -73,6 +74,7 @@ Future<bool> build(String platform) async {
       platform == ANDROID_PLATFORM ? await buildAndroid() : await buildIOS();
   if (status != 0) {
     logcat('$platform打包失败');
+    await uploadToWX('$platform', error: '$platform打包失败');
     return false;
   }
   // logcat('$platform打包完成');
@@ -91,10 +93,12 @@ Future<bool> build(String platform) async {
     apkPath.replaceAll(defultPathSeparator, Platform.pathSeparator);
   }
   var uploadStatus = await uploadPgyer(apkPath);
+  var toWXStatus;
   if (uploadStatus.status != 0) {
-    return false;
+    toWXStatus = await uploadToWX('$platform', error: '$platform上传失败');
+  } else {
+    toWXStatus = await uploadToWX('$platform', res: uploadStatus.res);
   }
-  var toWXStatus = await uploadToWX('$platform', uploadStatus?.res);
   if (toWXStatus != 0) {
     return false;
   }
@@ -142,7 +146,7 @@ Future<int> buildIOS() async {
 
 Future<UploadPgyerEntity> uploadPgyer(String apkPath) async {
   logcat('开始上传蒲公英');
-  Map<String, dynamic> _map;
+  Map<String, dynamic>? _map;
   var result = await start('curl', [
     '-F',
     'file=@$apkPath',
@@ -161,22 +165,32 @@ Future<UploadPgyerEntity> uploadPgyer(String apkPath) async {
   return UploadPgyerEntity(status: result, res: _map);
 }
 
-Future<int> uploadToWX(String platform, Map<String, dynamic> res) async {
+Future<int> uploadToWX(String platform,
+    {Map<String, dynamic>? res, String? error}) async {
   logcat('发送微信提示');
-  var version = res['buildVersion']?.toString();
-  if (version != null) {
-    version = version.replaceRange(
-        version.length - version.split('.').last.length,
-        version.length,
-        res['buildVersionNo']);
-  }
-  var str = {
-    'msgtype': 'markdown',
-    'markdown': {
-      'content':
-          '$platform $version 已上传至蒲公英\n[点击查看二维码](${res['buildQRCodeURL']})'
+  var str;
+  if (error != null) {
+    str = {
+      'msgtype': 'markdown',
+      'markdown': {'content': '$platform $error'}
+    };
+  } else {
+    var version = res?['buildVersion']?.toString();
+    if (version != null) {
+      version = version.replaceRange(
+          version.length - version.split('.').last.length,
+          version.length,
+          res?['buildVersionNo']);
     }
-  };
+    var link = 'https://www.pgyer.com/${res?['buildKey']}';
+    str = {
+      'msgtype': 'markdown',
+      'markdown': {
+        'content':
+            '$platform $version 已上传至蒲公英\n[点击查看二维码](${res?['buildQRCodeURL']})\n[点击安装]($link)'
+      }
+    };
+  }
   var result = await start('curl', [
     wxUrl,
     '-H',
@@ -190,13 +204,13 @@ Future<int> uploadToWX(String platform, Map<String, dynamic> res) async {
 
 //执行sh脚本
 Future<int> start(String executable, List<String> arguments,
-    {String workingDirectory,
-    Map<String, String> environment,
+    {String? workingDirectory,
+    Map<String, String>? environment,
     bool includeParentEnvironment = true,
     bool runInShell = true,
     ProcessStartMode mode = ProcessStartMode.normal,
     bool isPrint = true,
-    Callback<String> callback}) async {
+    Callback<String>? callback}) async {
   var result = await Process.start(executable, arguments,
       workingDirectory: workingDirectory,
       environment: environment,
@@ -220,7 +234,7 @@ void logcat(String content) {
 
 class UploadPgyerEntity {
   int status;
-  Map<String, dynamic> res;
+  Map<String, dynamic>? res;
 
-  UploadPgyerEntity({this.status, this.res});
+  UploadPgyerEntity({this.status = -1, this.res});
 }
