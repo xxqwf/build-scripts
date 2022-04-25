@@ -77,7 +77,7 @@ Future<bool> build(String platform) async {
       platform == ANDROID_PLATFORM ? await buildAndroid() : await buildIOS();
   if (status != 0) {
     logcat('$platform打包失败');
-    await uploadToWX('$platform', error: '$platform打包失败');
+    await uploadToWX('$platform', error: '打包失败');
     return false;
   }
   // logcat('$platform打包完成');
