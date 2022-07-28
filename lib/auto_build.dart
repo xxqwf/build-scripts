@@ -4,7 +4,7 @@ import 'dart:io';
 import 'args/args.dart';
 import 'args/argument.dart';
 
-String defultPathSeparator = '/';
+String defaultPathSeparator = '/';
 String projectDir = Directory('').absolute.path;
 String pgyerUrl = 'https://www.pgyer.com/apiv2/app/upload';
 String wxUrl =
@@ -15,44 +15,82 @@ const IOS_PLATFORM = 'ios';
 
 typedef Callback<T> = void Function(T value);
 
+Map buildCompleted = {ANDROID_PLATFORM: false, IOS_PLATFORM: false};
+
 Future<bool> calculate(List<String> args) async {
   if (args.isEmpty) return false;
-  if (argResults?['build'] != null) {
-    bool dependenciseStatus = await reEstablishDependencies();
-    if (!dependenciseStatus) {
-      logcat('项目依赖失败');
-      return true;
+
+  if (argResults?.wasParsed(Args().build.name) ?? false) {
+    await onBuildCommand();
+  }
+  if (argResults?.wasParsed(Args().upload.name) ?? false) {
+    await onUploadCommand();
+  }
+  return false;
+}
+
+onBuildCommand() async {
+  bool dependenciesStatus =
+      Args().clean.value ? await reEstablishDependencies() : true;
+  if (!dependenciesStatus) {
+    logcat('项目依赖失败');
+    return true;
+  } else {
+    if (Args().build.value.contains('All')) {
+      bool androidComplete = false;
+      bool iosComplete = false;
+      build(ANDROID_PLATFORM).then((value) {
+        androidComplete = true;
+        if (iosComplete && androidComplete) {
+          return true;
+        }
+      });
+      build(IOS_PLATFORM).then((value) {
+        iosComplete = true;
+        if (iosComplete && androidComplete) {
+          return true;
+        }
+      });
     } else {
-      if (Args().build.value.contains('All')) {
-        bool androidComplate = false;
-        bool iosComplate = false;
-        build(ANDROID_PLATFORM).then((value) {
-          androidComplate = true;
-          if (iosComplate && androidComplate) {
-            return true;
-          }
+      if (Args().build.value.contains(ANDROID_PLATFORM)) {
+        await build(ANDROID_PLATFORM).then((value) {
+          return true;
         });
-        build(IOS_PLATFORM).then((value) {
-          iosComplate = true;
-          if (iosComplate && androidComplate) {
-            return true;
-          }
+      }
+      if (Args().build.value.contains(IOS_PLATFORM)) {
+        await build(IOS_PLATFORM).then((value) {
+          return true;
         });
-      } else {
-        if (Args().build.value.contains(ANDROID_PLATFORM)) {
-          await build(ANDROID_PLATFORM).then((value) {
-            return true;
-          });
-        }
-        if (Args().build.value.contains(IOS_PLATFORM)) {
-          await build(IOS_PLATFORM).then((value) {
-            return true;
-          });
-        }
       }
     }
   }
-  return false;
+}
+
+onUploadCommand() async {
+  if (Args().upload.value.contains('All')) {
+    bool androidComplete = false;
+    bool iosComplete = false;
+    upload(ANDROID_PLATFORM).then((value) {
+      androidComplete = true;
+      if (iosComplete && androidComplete) {
+        return true;
+      }
+    });
+    upload(IOS_PLATFORM).then((value) {
+      iosComplete = true;
+      if (iosComplete && androidComplete) {
+        return true;
+      }
+    });
+  } else if (Args().upload.value.contains(ANDROID_PLATFORM)) {
+    await upload(ANDROID_PLATFORM).then((value) {
+      return true;
+    });
+  } else if (Args().upload.value.contains(IOS_PLATFORM)) {
+    await upload(IOS_PLATFORM).then((value) {
+      return true;
+    });
+  }
 }
 
 Future<bool> reEstablishDependencies() async {
@@ -80,20 +118,19 @@ Future<bool> build(String platform) async {
     await uploadToWX('$platform', error: '打包失败');
     return false;
   }
-  // logcat('$platform打包完成');
-  // var pubSentry = await start('flutter', ['pub', 'run', 'sentry_dart_plugin']);
-  // if (pubSentry != 0) {
-  //   logcat('$platform flutter pub run sentry_dart_plugin 失败');
-  //   return false;
-  // }
+  bool result = await upload(platform);
+  return result;
+}
+
+Future<bool> upload(String platform) async {
   var apkPath;
   if (platform == ANDROID_PLATFORM) {
     apkPath = '$projectDir${r'build/app/outputs/flutter-apk/app-release.apk'}';
   } else {
     apkPath = '$projectDir${r'build/ios/ipa/复骨医疗.ipa'}';
   }
-  if (Platform.pathSeparator != defultPathSeparator) {
-    apkPath.replaceAll(defultPathSeparator, Platform.pathSeparator);
+  if (Platform.pathSeparator != defaultPathSeparator) {
+    apkPath.replaceAll(defaultPathSeparator, Platform.pathSeparator);
   }
   var uploadStatus = await uploadPgyer(apkPath);
   var toWXStatus;
@@ -111,19 +148,16 @@ Future<bool> build(String platform) async {
 Future<int> buildAndroid() async {
   logcat('开始打包Android');
   var status = await start('flutter', ['build', 'apk', '--release']);
+  buildCompleted[ANDROID_PLATFORM] = status == 0;
+  runSentryDartPlugin();
   return status;
 }
 
 Future<int> buildIOS() async {
-  // var cdIos = await start('cd ios && pod install', []);
-  // if (cdIos != 0) {
-  //   logcat('$IOS_PLATFORM pod install 失败');
-  //   return cdIos;
-  // }
   logcat('开始打包iOS');
   var iosPath = '$projectDir${r'ios'}';
-  if (Platform.pathSeparator != defultPathSeparator) {
-    iosPath.replaceAll(defultPathSeparator, Platform.pathSeparator);
+  if (Platform.pathSeparator != defaultPathSeparator) {
+    iosPath.replaceAll(defaultPathSeparator, Platform.pathSeparator);
   }
 
   var podInstall = await start('pod', ['install'], workingDirectory: iosPath);
@@ -131,11 +165,6 @@ Future<int> buildIOS() async {
     logcat('$IOS_PLATFORM pod install 失败');
     return podInstall;
   }
-  // var cdRoot = await start('cd', ['../']);
-  // if (cdRoot != 0) {
-  //   logcat('$IOS_PLATFORM cd root directory 失败');
-  //   return cdRoot;
-  // }
 
   String exportOptionsPlistPath = '$projectDir${r'ExportOptions/dev.plist'}';
 
@@ -145,7 +174,31 @@ Future<int> buildIOS() async {
     '--release',
     '--export-options-plist=$exportOptionsPlistPath',
   ]);
+  buildCompleted[IOS_PLATFORM] = status == 0;
+  runSentryDartPlugin();
   return status;
+}
+
+runSentryDartPlugin() async {
+  bool execute = false;
+  if (Args().build.value == "All") {
+    execute = buildCompleted[IOS_PLATFORM] == true &&
+        buildCompleted[ANDROID_PLATFORM] == true;
+  } else if (Args().build.value == "Android") {
+    execute = buildCompleted[ANDROID_PLATFORM] == true;
+  } else if (Args().build.value == "ios") {
+    execute = buildCompleted[IOS_PLATFORM] == true;
+  }
+  if (execute) {
+    logcat('上传 Sentry 符号表');
+    var status = await start(
+        'flutter', ['packages', 'pub', 'run', 'sentry_dart_plugin']);
+    if (status == 0) {
+      logcat('Sentry 符号表上传成功');
+    } else {
+      logcat('Sentry 符号表上传失败');
+    }
+  }
 }
 
 Future<UploadPgyerEntity> uploadPgyer(String apkPath) async {
