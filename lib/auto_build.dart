@@ -147,7 +147,7 @@ Future<bool> upload(String platform) async {
         await uploadToWX('$platform', error: '$platform上传至 pgyer cos 失败');
   } else {
     var getAppInfoData = UploadPgyerEntity();
-    for (var it in List.generate(10, (index) => index)) {
+    for (var it in List.generate(20, (index) => index)) {
       await Future.delayed(Duration(seconds: 10));
       logcat('App info 第${it + 1}次 查询');
       var result = await getAppInfo(getCOSTokenStatus.res);
