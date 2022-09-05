@@ -9,6 +9,8 @@ String projectDir = Directory('').absolute.path;
 String pgyerUrl = 'https://www.pgyer.com/apiv2/app/upload';
 String wxUrl =
     'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=2169b3b7-120c-4a49-8747-43edee152276';
+// String wxUrl =
+//     'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=c324385d-e260-421c-ba10-187db8a701d6';
 
 const ANDROID_PLATFORM = 'Android';
 const IOS_PLATFORM = 'ios';
@@ -132,12 +134,40 @@ Future<bool> upload(String platform) async {
   if (Platform.pathSeparator != defaultPathSeparator) {
     apkPath.replaceAll(defaultPathSeparator, Platform.pathSeparator);
   }
-  var uploadStatus = await uploadPgyer(apkPath);
+  var getCOSTokenStatus = await getPgyerCOSToken(platform);
   var toWXStatus;
+  if (getCOSTokenStatus.status != 0) {
+    toWXStatus = await uploadToWX('$platform',
+        error: '$platform上传, 获取pgyer cos token 失败');
+    return true;
+  }
+  var uploadStatus = await uploadPgyerCOS(apkPath, getCOSTokenStatus.res);
   if (uploadStatus.status != 0) {
-    toWXStatus = await uploadToWX('$platform', error: '$platform上传失败');
+    toWXStatus =
+        await uploadToWX('$platform', error: '$platform上传至 pgyer cos 失败');
   } else {
-    toWXStatus = await uploadToWX('$platform', res: uploadStatus.res);
+    var getAppInfoData = UploadPgyerEntity();
+    for (var it in List.generate(10, (index) => index)) {
+      await Future.delayed(Duration(seconds: 10));
+      logcat('App info 第${it + 1}次 查询');
+      var result = await getAppInfo(getCOSTokenStatus.res);
+      if (result.status == 1216) {
+        logcat('蒲公英,发布失败');
+        break;
+      } else if (result.status == 0) {
+        getAppInfoData = result;
+        logcat('App info 第${it + 1}次 查询成功');
+        break;
+      }
+      logcat('App info 第${it + 1}次 未查询到信息');
+    }
+    if (getAppInfoData.status != 0) {
+      toWXStatus =
+          await uploadToWX('$platform', error: '$platform 获取蒲公英 AppInfo 失败');
+    } else {
+      toWXStatus =
+          await uploadToWX('$platform', res: getAppInfoData.res?['data']);
+    }
   }
   if (toWXStatus != 0) {
     return false;
@@ -201,25 +231,77 @@ runSentryDartPlugin() async {
   }
 }
 
-Future<UploadPgyerEntity> uploadPgyer(String apkPath) async {
-  logcat('开始上传蒲公英');
+Future<UploadPgyerEntity> getPgyerCOSToken(String platform) async {
+  logcat('获取蒲公英COS Token');
+  String url = 'https://www.pgyer.com/apiv2/app/getCOSToken';
   Map<String, dynamic>? _map;
+  int code = -1;
+  String appType = platform.toLowerCase();
   var result = await start('curl', [
-    '-F',
-    'file=@$apkPath',
     '-F',
     '_api_key=06bd871b10060956dfad79248e0cd44c',
     '-F',
-    'userKey=5fe3ed789f19eac5f21dc9790ad0a647',
-    pgyerUrl
+    'buildType=$appType',
+    url
   ], callback: (String res) {
     dynamic entity = jsonDecode(res);
+    code = entity['code'] ?? -1;
     if (entity['code'] == 0) {
+      logcat('获取 pgyer cos token 成功');
       _map = entity['data'];
+    } else {
+      logcat('获取 pgyer cos token 失败');
     }
   });
-  result != 0 ? logcat('上传蒲公英失败') : logcat('上传蒲公英完成');
+  return UploadPgyerEntity(status: code, res: _map);
+}
+
+Future<UploadPgyerEntity> uploadPgyerCOS(
+    String apkPath, Map<String, dynamic>? res) async {
+  logcat('开始上传蒲公英 cos');
+  Map<String, dynamic>? _map;
+  String? url = res?['endpoint'];
+  if (url == null) return UploadPgyerEntity(status: -1, res: _map);
+  var result = await start('curl', [
+    '--form-string',
+    'key=${res?['params']?['key']}',
+    '--form-string',
+    'signature=${res?['params']?['signature']}',
+    '--form-string',
+    'x-cos-security-token=${res?['params']?['x-cos-security-token']}',
+    '-F',
+    'file=@$apkPath',
+    url
+  ], callback: (String res) {
+    dynamic entity = jsonDecode(res);
+    logcat('content: $entity');
+    if (entity['code'] == 204) {
+      logcat('上传 App 至 pgyer cos 成功');
+      _map = entity['data'];
+    } else {
+      logcat('上传 App 至 pgyer cos 失败');
+    }
+  });
   return UploadPgyerEntity(status: result, res: _map);
+}
+
+Future<UploadPgyerEntity> getAppInfo(Map<String, dynamic>? data) async {
+  logcat('获取 pgyer App info');
+  Map<String, dynamic>? _map;
+  String? url = 'https://www.pgyer.com/apiv2/app/buildInfo';
+  int code = -1;
+  var result = await start('curl', [
+    '-F',
+    '_api_key=06bd871b10060956dfad79248e0cd44c',
+    '-F',
+    'buildKey=${data?['params']?['key']}',
+    url
+  ], callback: (String res) async {
+    dynamic entity = jsonDecode(res);
+    code = entity['code'] ?? -1;
+    _map = entity;
+  });
+  return UploadPgyerEntity(status: code, res: _map);
 }
 
 Future<int> uploadToWX(String platform,
@@ -234,10 +316,7 @@ Future<int> uploadToWX(String platform,
   } else {
     var version = res?['buildVersion']?.toString();
     if (version != null) {
-      version = version.replaceRange(
-          version.length - version.split('.').last.length,
-          version.length,
-          res?['buildVersionNo']);
+      version = '${version} (${res?['buildVersionNo'] ?? ''})';
     }
     var link = 'https://www.pgyer.com/${res?['buildKey']}';
     str = {
