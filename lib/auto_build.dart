@@ -148,7 +148,7 @@ Future<bool> upload(String platform) async {
   } else {
     var getAppInfoData = UploadPgyerEntity();
     for (var it in List.generate(20, (index) => index)) {
-      await Future.delayed(Duration(seconds: 10));
+      await Future.delayed(Duration(seconds: 60));
       logcat('App info 第${it + 1}次 查询');
       var result = await getAppInfo(getCOSTokenStatus.res);
       if (result.status == 1216) {
